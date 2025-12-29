@@ -1,0 +1,2014 @@
+openapi: 3.0.3
+info:
+  title: Personal Growth Planner API
+  description: |
+    RESTful API for the Personal Growth Planner application.
+    Supports OKR management, learning path tracking, calendar scheduling, and progress monitoring.
+  version: 1.0.0
+  contact:
+    name: Agiemme Planner Team
+    email: support@agiemme-planner.com
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.agiemme-planner.com/v1
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: OKRs
+    description: Objectives and Key Results management
+  - name: Learning Paths
+    description: Learning path and resource management
+  - name: Calendar
+    description: Calendar event scheduling and management
+  - name: Progress
+    description: Progress tracking and reporting
+  - name: Users
+    description: User profile management
+
+paths:
+  # ============================================================================
+  # Authentication Endpoints
+  # ============================================================================
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request data (e.g., email already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user and create session
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: End user session
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Successfully logged out
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ============================================================================
+  # OKR Endpoints
+  # ============================================================================
+
+  /okrs/objectives:
+    get:
+      tags: [OKRs]
+      summary: Get all objectives for authenticated user
+      operationId: getObjectives
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: category
+          in: query
+          description: Filter by life area category
+          schema:
+            $ref: '#/components/schemas/ObjectiveCategory'
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            $ref: '#/components/schemas/ObjectiveStatus'
+        - name: sortBy
+          in: query
+          description: Sort field
+          schema:
+            type: string
+            enum: [createdAt, targetDate, updatedAt]
+            default: targetDate
+        - name: sortOrder
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: List of objectives with key results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ObjectiveWithKeyResults'
+                  meta:
+                    $ref: '#/components/schemas/ListMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [OKRs]
+      summary: Create a new objective
+      operationId: createObjective
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectiveRequest'
+      responses:
+        '201':
+          description: Objective created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveWithKeyResults'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /okrs/objectives/{objectiveId}:
+    get:
+      tags: [OKRs]
+      summary: Get objective by ID with all key results
+      operationId: getObjectiveById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+      responses:
+        '200':
+          description: Objective details with key results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveWithKeyResults'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [OKRs]
+      summary: Update objective
+      operationId: updateObjective
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateObjectiveRequest'
+      responses:
+        '200':
+          description: Objective updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveWithKeyResults'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [OKRs]
+      summary: Delete objective (cascades to key results)
+      operationId: deleteObjective
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+      responses:
+        '204':
+          description: Objective deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /okrs/key-results:
+    post:
+      tags: [OKRs]
+      summary: Create a new key result for an objective
+      operationId: createKeyResult
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyResultRequest'
+      responses:
+        '201':
+          description: Key result created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyResult'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /okrs/key-results/{keyResultId}:
+    get:
+      tags: [OKRs]
+      summary: Get key result by ID
+      operationId: getKeyResultById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KeyResultId'
+      responses:
+        '200':
+          description: Key result details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyResult'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [OKRs]
+      summary: Update key result
+      operationId: updateKeyResult
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KeyResultId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyResultRequest'
+      responses:
+        '200':
+          description: Key result updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyResult'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [OKRs]
+      summary: Delete key result
+      operationId: deleteKeyResult
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KeyResultId'
+      responses:
+        '204':
+          description: Key result deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /okrs/key-results/{keyResultId}/progress:
+    post:
+      tags: [OKRs]
+      summary: Record progress update for key result
+      operationId: createProgressUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KeyResultId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProgressUpdateRequest'
+      responses:
+        '201':
+          description: Progress update recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressUpdate'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    get:
+      tags: [OKRs]
+      summary: Get progress history for key result
+      operationId: getProgressUpdates
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KeyResultId'
+        - name: startDate
+          in: query
+          description: Filter progress updates from this date
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Filter progress updates until this date
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Progress update history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgressUpdate'
+                  meta:
+                    $ref: '#/components/schemas/ListMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ============================================================================
+  # Learning Path Endpoints
+  # ============================================================================
+
+  /learning-paths:
+    get:
+      tags: [Learning Paths]
+      summary: Get all learning paths for authenticated user
+      operationId: getLearningPaths
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyResultId
+          in: query
+          description: Filter by linked key result
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            $ref: '#/components/schemas/LearningPathStatus'
+      responses:
+        '200':
+          description: List of learning paths
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LearningPathWithResources'
+                  meta:
+                    $ref: '#/components/schemas/ListMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [Learning Paths]
+      summary: Create a new learning path
+      operationId: createLearningPath
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLearningPathRequest'
+      responses:
+        '201':
+          description: Learning path created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPathWithResources'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /learning-paths/{learningPathId}:
+    get:
+      tags: [Learning Paths]
+      summary: Get learning path by ID with all resources
+      operationId: getLearningPathById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningPathId'
+      responses:
+        '200':
+          description: Learning path details with resources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPathWithResources'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Learning Paths]
+      summary: Update learning path
+      operationId: updateLearningPath
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningPathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLearningPathRequest'
+      responses:
+        '200':
+          description: Learning path updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPathWithResources'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Learning Paths]
+      summary: Delete learning path (cascades to resources)
+      operationId: deleteLearningPath
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningPathId'
+      responses:
+        '204':
+          description: Learning path deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /learning-paths/{learningPathId}/resources:
+    post:
+      tags: [Learning Paths]
+      summary: Add a resource to learning path
+      operationId: createLearningResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningPathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLearningResourceRequest'
+      responses:
+        '201':
+          description: Learning resource added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningResource'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /learning-resources/{resourceId}:
+    get:
+      tags: [Learning Paths]
+      summary: Get learning resource by ID
+      operationId: getLearningResourceById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningResourceId'
+      responses:
+        '200':
+          description: Learning resource details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningResource'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Learning Paths]
+      summary: Update learning resource
+      operationId: updateLearningResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLearningResourceRequest'
+      responses:
+        '200':
+          description: Learning resource updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningResource'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Learning Paths]
+      summary: Delete learning resource
+      operationId: deleteLearningResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningResourceId'
+      responses:
+        '204':
+          description: Learning resource deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /learning-resources/{resourceId}/complete:
+    post:
+      tags: [Learning Paths]
+      summary: Mark learning resource as complete
+      operationId: completeLearningResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LearningResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  maxLength: 2000
+                  description: Optional reflections after completing resource
+      responses:
+        '200':
+          description: Learning resource marked complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningResource'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ============================================================================
+  # Calendar Endpoints
+  # ============================================================================
+
+  /calendar/events:
+    get:
+      tags: [Calendar]
+      summary: Get calendar events for authenticated user
+      operationId: getCalendarEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          description: Filter events from this date
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: Filter events until this date
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: category
+          in: query
+          description: Filter by category
+          schema:
+            $ref: '#/components/schemas/ObjectiveCategory'
+        - name: status
+          in: query
+          description: Filter by completion status
+          schema:
+            $ref: '#/components/schemas/CalendarEventStatus'
+      responses:
+        '200':
+          description: List of calendar events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CalendarEvent'
+                  meta:
+                    $ref: '#/components/schemas/ListMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    post:
+      tags: [Calendar]
+      summary: Create a new calendar event
+      operationId: createCalendarEvent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCalendarEventRequest'
+      responses:
+        '201':
+          description: Calendar event created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEvent'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /calendar/events/{eventId}:
+    get:
+      tags: [Calendar]
+      summary: Get calendar event by ID
+      operationId: getCalendarEventById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CalendarEventId'
+      responses:
+        '200':
+          description: Calendar event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEvent'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Calendar]
+      summary: Update calendar event
+      operationId: updateCalendarEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CalendarEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCalendarEventRequest'
+      responses:
+        '200':
+          description: Calendar event updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEvent'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Calendar]
+      summary: Delete calendar event
+      operationId: deleteCalendarEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CalendarEventId'
+      responses:
+        '204':
+          description: Calendar event deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /calendar/events/{eventId}/complete:
+    post:
+      tags: [Calendar]
+      summary: Mark calendar event as complete
+      operationId: completeCalendarEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CalendarEventId'
+      responses:
+        '200':
+          description: Calendar event marked complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEvent'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ============================================================================
+  # Progress Endpoints
+  # ============================================================================
+
+  /progress/dashboard:
+    get:
+      tags: [Progress]
+      summary: Get overall progress dashboard
+      operationId: getProgressDashboard
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Progress dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressDashboard'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /progress/reports:
+    post:
+      tags: [Progress]
+      summary: Generate progress report for custom date range
+      operationId: generateProgressReport
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+                - endDate
+                - format
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                  description: Report start date
+                endDate:
+                  type: string
+                  format: date
+                  description: Report end date
+                format:
+                  type: string
+                  enum: [pdf, csv]
+                  description: Report format
+                includeCategories:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ObjectiveCategory'
+                  description: Filter by specific categories (optional)
+      responses:
+        '200':
+          description: Progress report generated
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /progress/at-risk:
+    get:
+      tags: [Progress]
+      summary: Get key results that are at risk (behind schedule)
+      operationId: getAtRiskKeyResults
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of at-risk key results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/KeyResultWithObjective'
+                  meta:
+                    $ref: '#/components/schemas/ListMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ============================================================================
+  # User Profile Endpoints
+  # ============================================================================
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get authenticated user profile
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    put:
+      tags: [Users]
+      summary: Update user profile
+      operationId: updateCurrentUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+# ============================================================================
+# Components
+# ============================================================================
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication token
+
+  parameters:
+    ObjectiveId:
+      name: objectiveId
+      in: path
+      required: true
+      description: Unique objective identifier
+      schema:
+        type: string
+        format: uuid
+
+    KeyResultId:
+      name: keyResultId
+      in: path
+      required: true
+      description: Unique key result identifier
+      schema:
+        type: string
+        format: uuid
+
+    LearningPathId:
+      name: learningPathId
+      in: path
+      required: true
+      description: Unique learning path identifier
+      schema:
+        type: string
+        format: uuid
+
+    LearningResourceId:
+      name: resourceId
+      in: path
+      required: true
+      description: Unique learning resource identifier
+      schema:
+        type: string
+        format: uuid
+
+    CalendarEventId:
+      name: eventId
+      in: path
+      required: true
+      description: Unique calendar event identifier
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # ========================================================================
+    # Enums
+    # ========================================================================
+
+    ObjectiveCategory:
+      type: string
+      enum:
+        - career
+        - health
+        - relationships
+        - skills
+        - financial
+        - personal
+
+    ObjectiveStatus:
+      type: string
+      enum:
+        - active
+        - completed
+        - archived
+        - abandoned
+
+    KeyResultStatus:
+      type: string
+      enum:
+        - not_started
+        - in_progress
+        - completed
+        - at_risk
+
+    LearningPathStatus:
+      type: string
+      enum:
+        - not_started
+        - in_progress
+        - completed
+
+    LearningResourceType:
+      type: string
+      enum:
+        - book
+        - course
+        - article
+        - video
+        - practice_project
+        - other
+
+    LearningResourceStatus:
+      type: string
+      enum:
+        - not_started
+        - in_progress
+        - completed
+
+    CalendarEventStatus:
+      type: string
+      enum:
+        - scheduled
+        - in_progress
+        - completed
+        - cancelled
+
+    # ========================================================================
+    # Entity Schemas
+    # ========================================================================
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - timezone
+        - notificationPreferences
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        timezone:
+          type: string
+          description: IANA timezone identifier
+          example: America/New_York
+        notificationPreferences:
+          type: object
+          properties:
+            email:
+              type: boolean
+              description: Enable email notifications
+            reminderHours:
+              type: integer
+              minimum: 1
+              description: Hours before event to send reminder
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Objective:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - category
+        - targetDate
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+          example: Advance my career in software engineering
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+        targetDate:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ObjectiveStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ObjectiveWithKeyResults:
+      allOf:
+        - $ref: '#/components/schemas/Objective'
+        - type: object
+          required:
+            - keyResults
+          properties:
+            keyResults:
+              type: array
+              minItems: 2
+              maxItems: 5
+              items:
+                $ref: '#/components/schemas/KeyResult'
+
+    KeyResult:
+      type: object
+      required:
+        - id
+        - objectiveId
+        - description
+        - targetValue
+        - currentValue
+        - unit
+        - deadline
+        - completionPercentage
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        objectiveId:
+          type: string
+          format: uuid
+        description:
+          type: string
+          minLength: 10
+          maxLength: 300
+          example: Complete 3 certifications
+        targetValue:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+          example: 3.00
+        currentValue:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 1.00
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: certifications
+        deadline:
+          type: string
+          format: date
+        completionPercentage:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 100
+          description: Calculated (currentValue / targetValue) * 100
+        status:
+          $ref: '#/components/schemas/KeyResultStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KeyResultWithObjective:
+      allOf:
+        - $ref: '#/components/schemas/KeyResult'
+        - type: object
+          required:
+            - objective
+          properties:
+            objective:
+              $ref: '#/components/schemas/Objective'
+
+    ProgressUpdate:
+      type: object
+      required:
+        - id
+        - keyResultId
+        - valueRecorded
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        keyResultId:
+          type: string
+          format: uuid
+        valueRecorded:
+          type: number
+          format: decimal
+          minimum: 0
+        notes:
+          type: string
+          maxLength: 1000
+          nullable: true
+        recordedAt:
+          type: string
+          format: date-time
+
+    LearningPath:
+      type: object
+      required:
+        - id
+        - userId
+        - name
+        - estimatedDurationHours
+        - completionPercentage
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        keyResultId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional linked key result
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+          example: Master React Development
+        description:
+          type: string
+          nullable: true
+        estimatedDurationHours:
+          type: integer
+          minimum: 1
+        completionPercentage:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 100
+        status:
+          $ref: '#/components/schemas/LearningPathStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LearningPathWithResources:
+      allOf:
+        - $ref: '#/components/schemas/LearningPath'
+        - type: object
+          required:
+            - resources
+          properties:
+            resources:
+              type: array
+              items:
+                $ref: '#/components/schemas/LearningResource'
+
+    LearningResource:
+      type: object
+      required:
+        - id
+        - learningPathId
+        - name
+        - type
+        - estimatedTimeHours
+        - sequenceOrder
+        - completionStatus
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        learningPathId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+          example: React Hooks Tutorial - Udemy
+        type:
+          $ref: '#/components/schemas/LearningResourceType'
+        reference:
+          type: string
+          format: uri
+          maxLength: 500
+          nullable: true
+          example: https://udemy.com/react-hooks
+        estimatedTimeHours:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+        sequenceOrder:
+          type: integer
+          minimum: 1
+        completionStatus:
+          $ref: '#/components/schemas/LearningResourceStatus'
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CalendarEvent:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - startDateTime
+        - durationMinutes
+        - category
+        - completionStatus
+        - reminderSent
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        learningResourceId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Linked learning resource (mutually exclusive with keyResultId)
+        keyResultId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Linked key result (mutually exclusive with learningResourceId)
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+          example: React Tutorial - Components
+        description:
+          type: string
+          nullable: true
+        startDateTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        recurrenceRule:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: iCalendar RRULE format
+          example: FREQ=WEEKLY;BYDAY=FR
+        recurrenceEndDate:
+          type: string
+          format: date
+          nullable: true
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+        completionStatus:
+          $ref: '#/components/schemas/CalendarEventStatus'
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reminderSent:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ========================================================================
+    # Request/Response Schemas
+    # ========================================================================
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+        - timezone
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          format: password
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        timezone:
+          type: string
+          default: UTC
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required:
+        - user
+        - token
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: JWT authentication token
+
+    CreateObjectiveRequest:
+      type: object
+      required:
+        - title
+        - category
+        - targetDate
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+        targetDate:
+          type: string
+          format: date
+        keyResults:
+          type: array
+          minItems: 2
+          maxItems: 5
+          items:
+            type: object
+            required:
+              - description
+              - targetValue
+              - unit
+              - deadline
+            properties:
+              description:
+                type: string
+                minLength: 10
+                maxLength: 300
+              targetValue:
+                type: number
+                format: decimal
+                minimum: 0
+                exclusiveMinimum: true
+              unit:
+                type: string
+                minLength: 1
+                maxLength: 50
+              deadline:
+                type: string
+                format: date
+
+    UpdateObjectiveRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+        targetDate:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ObjectiveStatus'
+
+    CreateKeyResultRequest:
+      type: object
+      required:
+        - objectiveId
+        - description
+        - targetValue
+        - unit
+        - deadline
+      properties:
+        objectiveId:
+          type: string
+          format: uuid
+        description:
+          type: string
+          minLength: 10
+          maxLength: 300
+        targetValue:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 50
+        deadline:
+          type: string
+          format: date
+
+    UpdateKeyResultRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 10
+          maxLength: 300
+        targetValue:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+        currentValue:
+          type: number
+          format: decimal
+          minimum: 0
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 50
+        deadline:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/KeyResultStatus'
+
+    CreateProgressUpdateRequest:
+      type: object
+      required:
+        - valueRecorded
+      properties:
+        valueRecorded:
+          type: number
+          format: decimal
+          minimum: 0
+        notes:
+          type: string
+          maxLength: 1000
+
+    CreateLearningPathRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        keyResultId:
+          type: string
+          format: uuid
+          nullable: true
+
+    UpdateLearningPathRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        keyResultId:
+          type: string
+          format: uuid
+          nullable: true
+
+    CreateLearningResourceRequest:
+      type: object
+      required:
+        - name
+        - type
+        - estimatedTimeHours
+      properties:
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+        type:
+          $ref: '#/components/schemas/LearningResourceType'
+        reference:
+          type: string
+          format: uri
+          maxLength: 500
+        estimatedTimeHours:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+        sequenceOrder:
+          type: integer
+          minimum: 1
+          description: Optional, auto-increments if not provided
+
+    UpdateLearningResourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 5
+          maxLength: 200
+        type:
+          $ref: '#/components/schemas/LearningResourceType'
+        reference:
+          type: string
+          format: uri
+          maxLength: 500
+        estimatedTimeHours:
+          type: number
+          format: decimal
+          minimum: 0
+          exclusiveMinimum: true
+        sequenceOrder:
+          type: integer
+          minimum: 1
+        completionStatus:
+          $ref: '#/components/schemas/LearningResourceStatus'
+        notes:
+          type: string
+          maxLength: 2000
+
+    CreateCalendarEventRequest:
+      type: object
+      required:
+        - title
+        - startDateTime
+        - durationMinutes
+        - category
+      properties:
+        learningResourceId:
+          type: string
+          format: uuid
+          nullable: true
+        keyResultId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        startDateTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        recurrenceRule:
+          type: string
+          maxLength: 200
+          nullable: true
+        recurrenceEndDate:
+          type: string
+          format: date
+          nullable: true
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+
+    UpdateCalendarEventRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+        startDateTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        recurrenceRule:
+          type: string
+          maxLength: 200
+          nullable: true
+        recurrenceEndDate:
+          type: string
+          format: date
+          nullable: true
+        category:
+          $ref: '#/components/schemas/ObjectiveCategory'
+        completionStatus:
+          $ref: '#/components/schemas/CalendarEventStatus'
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        timezone:
+          type: string
+        notificationPreferences:
+          type: object
+          properties:
+            email:
+              type: boolean
+            reminderHours:
+              type: integer
+              minimum: 1
+
+    ProgressDashboard:
+      type: object
+      required:
+        - totalObjectives
+        - activeObjectives
+        - completedObjectives
+        - totalKeyResults
+        - completedKeyResults
+        - atRiskKeyResults
+        - totalLearningPaths
+        - completedLearningPaths
+        - totalHoursInvested
+        - upcomingMilestones
+        - objectivesByCategory
+      properties:
+        totalObjectives:
+          type: integer
+        activeObjectives:
+          type: integer
+        completedObjectives:
+          type: integer
+        totalKeyResults:
+          type: integer
+        completedKeyResults:
+          type: integer
+        atRiskKeyResults:
+          type: integer
+        totalLearningPaths:
+          type: integer
+        completedLearningPaths:
+          type: integer
+        totalHoursInvested:
+          type: number
+          format: decimal
+          description: Calculated from completed calendar events
+        upcomingMilestones:
+          type: array
+          items:
+            type: object
+            properties:
+              keyResultId:
+                type: string
+                format: uuid
+              description:
+                type: string
+              deadline:
+                type: string
+                format: date
+              daysUntilDeadline:
+                type: integer
+        objectivesByCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                $ref: '#/components/schemas/ObjectiveCategory'
+              total:
+                type: integer
+              completed:
+                type: integer
+              completionPercentage:
+                type: number
+                format: decimal
+
+    ListMetadata:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of items
+        count:
+          type: integer
+          description: Number of items in current response
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - message
+          properties:
+            message:
+              type: string
+              description: Human-readable error message
+            code:
+              type: string
+              description: Machine-readable error code
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - message
+            - validationErrors
+          properties:
+            message:
+              type: string
+              example: Validation failed
+            validationErrors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: Field name that failed validation
+                  message:
+                    type: string
+                    description: Validation error message
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    BadRequestError:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
