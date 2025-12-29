@@ -185,3 +185,10 @@ If migrations fail, check `migrations` table in database to see what's been appl
 
 ### TypeScript "Property does not exist on ImportMeta"
 Make sure `frontend/src/vite-env.d.ts` exists with Vite type definitions.
+
+## Active Technologies
+- TypeScript (Node.js 20+), YAML (Docker Compose file format 3.8) + Docker Engine 24+, Docker Compose V2, existing package.json dependencies (Express, React, Vite, PostgreSQL client) (001-docker-compose)
+- PostgreSQL 16 (official Docker image), Docker named volumes for persistence (001-docker-compose)
+
+## Recent Changes
+- 001-docker-compose: Added TypeScript (Node.js 20+), YAML (Docker Compose file format 3.8) + Docker Engine 24+, Docker Compose V2, existing package.json dependencies (Express, React, Vite, PostgreSQL client)

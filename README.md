@@ -45,13 +45,34 @@ agiemme-planner/
 └── README.md
 ```
 
-## Prerequisites
+## Quick Start with Docker 🐳 (Recommended)
+
+**Get the entire stack running in one command!**
+
+```bash
+npm run docker:up
+```
+
+Access the app at **http://localhost:5173** ✨
+
+- ✅ Zero configuration required
+- ✅ Automatic dependency installation
+- ✅ Database migrations run automatically
+- ✅ Hot-reload enabled for development
+
+**📖 Full Docker Guide**: See [README-DOCKER.md](./README-DOCKER.md) for complete Docker documentation, troubleshooting, and platform-specific notes.
+
+---
+
+## Manual Setup (Without Docker)
+
+### Prerequisites
 
 - Node.js 20+ and npm 10+
 - PostgreSQL 16+
 - Git
 
-## Getting Started
+### Getting Started
 
 ### 1. Clone the Repository
 

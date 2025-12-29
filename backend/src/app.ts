@@ -7,6 +7,7 @@ import { errorHandler, createError } from './api/middleware/error-handler';
 import authRoutes from './api/routes/auth';
 import objectivesRoutes from './api/routes/objectives';
 import keyResultsRoutes from './api/routes/key-results';
+import healthRoutes from './api/routes/health';
 
 /**
  * Express application setup
@@ -40,16 +41,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
-
 // API routes
+app.use('/api/health', healthRoutes); // Health check with database connection test
 app.use('/api/auth', authRoutes);
 app.use('/api/objectives', objectivesRoutes);
 app.use('/api/key-results', keyResultsRoutes);

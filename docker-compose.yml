@@ -1,0 +1,147 @@
+# Docker Compose configuration for Agiemme Planner
+# Provides complete local development environment with PostgreSQL, Express backend, and React frontend
+
+version: '3.8'
+
+services:
+  # PostgreSQL 16 database service
+  postgres:
+    image: postgres:16-alpine
+    container_name: agiemme-planner-db
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-agiemme_planner_dev}
+      POSTGRES_USER: ${DATABASE_USER:-agiemme_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-dev_password_change_in_production}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-agiemme_user} -d ${DATABASE_NAME:-agiemme_planner_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - agiemme-network
+
+  # Express backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: agiemme-planner-backend
+    environment:
+      # Database configuration
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-agiemme_planner_dev}
+      DATABASE_USER: ${DATABASE_USER:-agiemme_user}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-dev_password_change_in_production}
+      # Application configuration
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      # Authentication configuration
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_INSECURE_change_for_production}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+      # Development configuration (native file watching)
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-false}
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-false}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Source code bind mount with cached mode for macOS performance
+      - ./backend:/app:cached
+      # Named volumes for node_modules (performance optimization)
+      - backend_node_modules:/app/node_modules
+      # Build output volume
+      - backend_dist:/app/dist
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - agiemme-network
+
+  # React frontend service with Vite
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: agiemme-planner-frontend
+    environment:
+      # API connection
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000/api}
+      # Environment
+      NODE_ENV: ${NODE_ENV:-development}
+      # Vite HMR configuration
+      VITE_HMR_PORT: ${VITE_HMR_PORT:-5173}
+      VITE_HMR_HOST: ${VITE_HMR_HOST:-localhost}
+      # Development configuration (native file watching)
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-false}
+    ports:
+      - "5173:5173"
+    volumes:
+      # Source code bind mount with cached mode for macOS performance
+      - ./frontend:/app:cached
+      # Named volumes for node_modules (performance optimization)
+      - frontend_node_modules:/app/node_modules
+      # Vite dependency cache
+      - frontend_vite_cache:/app/node_modules/.vite
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - agiemme-network
+
+# Named volumes for data persistence and performance
+volumes:
+  # PostgreSQL data - CRITICAL: Contains all database data
+  postgres_data:
+    driver: local
+    labels:
+      com.agiemme.description: "PostgreSQL data for Agiemme Planner"
+      com.agiemme.environment: "development"
+  
+  # Backend dependencies - Restorable via npm ci
+  backend_node_modules:
+    driver: local
+    labels:
+      com.agiemme.service: "backend"
+  
+  # Frontend dependencies - Restorable via npm ci
+  frontend_node_modules:
+    driver: local
+    labels:
+      com.agiemme.service: "frontend"
+  
+  # Backend build output - Restorable via npm build
+  backend_dist:
+    driver: local
+    labels:
+      com.agiemme.service: "backend"
+  
+  # Vite dependency cache - Restorable automatically
+  frontend_vite_cache:
+    driver: local
+    labels:
+      com.agiemme.service: "frontend"
+
+# Bridge network for service communication
+networks:
+  agiemme-network:
+    driver: bridge
+    labels:
+      com.agiemme.project: "agiemme-planner"

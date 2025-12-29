@@ -1,0 +1,595 @@
+# Docker Compose Service Contracts
+# Feature: 001-docker-compose
+# Date: 2025-12-29
+#
+# This file defines the contracts and expectations for all Docker Compose services.
+# It serves as validation schema and documentation for service interactions.
+
+version: "3.8"
+
+# ==============================================================================
+# SERVICE CONTRACTS
+# ==============================================================================
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database Service Contract
+  # ----------------------------------------------------------------------------
+  postgres:
+    contract:
+      description: "PostgreSQL 16 database for persistent data storage"
+      responsibilities:
+        - "Store application data (users, objectives, key results, progress updates)"
+        - "Provide reliable data persistence across container restarts"
+        - "Signal readiness via health check before dependent services start"
+
+      guarantees:
+        availability:
+          - "Health check passes within 35 seconds of container start"
+          - "Accepts connections on port 5432 after health check passes"
+          - "Data persists in named volume across container lifecycle"
+
+        performance:
+          - "Ready to accept connections within 10-15 seconds typically"
+          - "Health check responds within 5 seconds"
+
+        data:
+          - "All data stored in /var/lib/postgresql/data persists in postgres_data volume"
+          - "Data survives 'docker compose down' (without -v flag)"
+          - "Data lost only on explicit 'docker compose down -v'"
+
+      dependencies:
+        requires: []  # No dependencies
+        required_by:
+          - backend
+
+      exposed_ports:
+        - port: 5432
+          protocol: TCP
+          purpose: "PostgreSQL connections"
+          accessibility: "Host and container network"
+
+      health_check:
+        command: "pg_isready -U agiemme_user -d agiemme_planner_dev"
+        interval: "5s"
+        timeout: "5s"
+        retries: 5
+        start_period: "10s"
+        success_criteria: "Exit code 0 (database accepting connections)"
+        failure_criteria: "Exit code 1 (connection refused) after 5 retries"
+
+      environment_schema:
+        required:
+          POSTGRES_DB:
+            type: string
+            default: "agiemme_planner_dev"
+            validation: "Non-empty string, alphanumeric with underscores"
+
+          POSTGRES_USER:
+            type: string
+            default: "agiemme_user"
+            validation: "Non-empty string, alphanumeric with underscores"
+
+          POSTGRES_PASSWORD:
+            type: string
+            default: "dev_password_change_in_production"
+            security: CRITICAL
+            validation: "Non-empty string, min 8 characters recommended"
+
+        optional:
+          POSTGRES_INITDB_ARGS:
+            type: string
+            default: "--encoding=UTF8 --locale=en_US.UTF-8"
+            validation: "Valid PostgreSQL initdb arguments"
+
+      volume_contracts:
+        postgres_data:
+          mount_point: "/var/lib/postgresql/data"
+          type: "named_volume"
+          persistence: "critical"  # User data loss if removed
+          typical_size: "100-500 MB"
+
+  # ----------------------------------------------------------------------------
+  # Backend API Service Contract
+  # ----------------------------------------------------------------------------
+  backend:
+    contract:
+      description: "Express.js REST API server with TypeScript"
+      responsibilities:
+        - "Serve RESTful API endpoints for frontend consumption"
+        - "Execute database migrations on startup"
+        - "Validate and process business logic"
+        - "Authenticate and authorize requests via JWT"
+        - "Provide health check endpoint for monitoring"
+
+      guarantees:
+        availability:
+          - "Health check passes within 60 seconds of container start"
+          - "Responds to HTTP requests on port 3000 after health check passes"
+          - "Migrations complete successfully before accepting requests"
+
+        performance:
+          - "Hot-reload triggers within 3 seconds of source code changes"
+          - "Health endpoint responds within 500ms"
+          - "API endpoints meet response time requirements (200ms/500ms/1000ms)"
+
+        data:
+          - "All migrations applied idempotently on startup"
+          - "Database schema matches application expectations"
+          - "No data loss during hot-reload cycles"
+
+      dependencies:
+        requires:
+          - service: postgres
+            condition: service_healthy
+            reason: "Database must be ready for migrations and queries"
+
+        required_by:
+          - frontend
+
+      exposed_ports:
+        - port: 3000
+          protocol: HTTP
+          purpose: "REST API endpoints"
+          accessibility: "Host and container network"
+          endpoints:
+            - path: "/api/health"
+              method: GET
+              purpose: "Health check"
+              response: "200 OK with JSON status"
+
+            - path: "/api/*"
+              method: "GET, POST, PUT, DELETE"
+              purpose: "Application API"
+              authentication: "JWT Bearer token (except auth endpoints)"
+
+      health_check:
+        command: "curl -f http://localhost:3000/api/health || exit 1"
+        interval: "10s"
+        timeout: "5s"
+        retries: 3
+        start_period: "30s"
+        success_criteria: "HTTP 200 response with { status: 'healthy' }"
+        failure_criteria: "Connection refused or non-200 status after 3 retries"
+
+      environment_schema:
+        required:
+          # Database connection
+          DATABASE_HOST:
+            type: string
+            default: "postgres"
+            validation: "Valid hostname or IP"
+
+          DATABASE_PORT:
+            type: number
+            default: 5432
+            validation: "1-65535"
+
+          DATABASE_NAME:
+            type: string
+            default: "agiemme_planner_dev"
+            validation: "Non-empty string"
+
+          DATABASE_USER:
+            type: string
+            default: "agiemme_user"
+            validation: "Non-empty string"
+
+          DATABASE_PASSWORD:
+            type: string
+            default: "dev_password_change_in_production"
+            security: CRITICAL
+            validation: "Non-empty string"
+
+          # Application
+          NODE_ENV:
+            type: enum
+            allowed: ["development", "production", "test"]
+            default: "development"
+
+          PORT:
+            type: number
+            default: 3000
+            validation: "1-65535"
+
+          FRONTEND_URL:
+            type: string
+            default: "http://localhost:5173"
+            validation: "Valid HTTP(S) URL"
+            purpose: "CORS whitelist"
+
+          # Authentication
+          JWT_SECRET:
+            type: string
+            default: "dev_jwt_secret_INSECURE_change_for_production"
+            security: CRITICAL
+            validation: "Non-empty string, 32+ characters recommended"
+
+          JWT_EXPIRATION:
+            type: string
+            default: "7d"
+            validation: "Valid time expression (e.g., 7d, 24h, 30m)"
+
+        optional:
+          LOG_LEVEL:
+            type: enum
+            allowed: ["error", "warn", "info", "debug"]
+            default: "debug"
+
+          CHOKIDAR_USEPOLLING:
+            type: boolean
+            default: false
+            purpose: "File watching mode (false = native inotify)"
+
+      volume_contracts:
+        source_code:
+          host_path: "./backend"
+          mount_point: "/app"
+          type: "bind_mount"
+          mode: "cached"
+          purpose: "Hot-reload source code changes"
+
+        backend_node_modules:
+          mount_point: "/app/node_modules"
+          type: "anonymous_volume"
+          persistence: "restorable"  # Can be recreated with npm ci
+          typical_size: "200-300 MB"
+          purpose: "Isolate dependencies from host for performance"
+
+        backend_dist:
+          mount_point: "/app/dist"
+          type: "named_volume"
+          persistence: "restorable"  # Can be recreated with npm build
+          typical_size: "10-50 MB"
+          purpose: "Build artifacts"
+
+      startup_sequence:
+        1:
+          step: "Wait for PostgreSQL health check"
+          script: "docker-entrypoint.sh"
+          action: "Poll pg_isready until success"
+          timeout: "60 seconds"
+
+        2:
+          step: "Install/update dependencies"
+          script: "docker-entrypoint.sh"
+          action: "Run npm ci if package.json changed"
+          condition: "package.json or package-lock.json newer than marker file"
+
+        3:
+          step: "Run database migrations"
+          script: "docker-entrypoint.sh"
+          action: "Execute npm run migrate:up"
+          failure_behavior: "Exit container with code 1"
+
+        4:
+          step: "Display security warnings"
+          script: "docker-entrypoint.sh"
+          action: "Check for insecure default values"
+          warnings:
+            - "JWT_SECRET using default value"
+            - "DATABASE_PASSWORD using default value"
+
+        5:
+          step: "Start application server"
+          command: "npm run dev"
+          action: "Launch Express server with hot-reload (tsx watch)"
+
+  # ----------------------------------------------------------------------------
+  # Frontend Service Contract
+  # ----------------------------------------------------------------------------
+  frontend:
+    contract:
+      description: "React application served by Vite dev server"
+      responsibilities:
+        - "Serve React application with Hot Module Replacement (HMR)"
+        - "Proxy API requests to backend service"
+        - "Provide development UI on port 5173"
+        - "Reload automatically on source code changes"
+
+      guarantees:
+        availability:
+          - "Dev server starts within 20 seconds of container start"
+          - "Responds to HTTP requests on port 5173"
+          - "WebSocket connection available for HMR"
+
+        performance:
+          - "Hot-reload triggers within 2 seconds of source code changes"
+          - "HMR updates reflect in browser without full page reload"
+          - "Initial page load under 3 seconds"
+
+        data:
+          - "No persistent data managed by this service"
+          - "All state fetched from backend API"
+
+      dependencies:
+        requires:
+          - service: backend
+            condition: service_started
+            reason: "Frontend makes API calls to backend, but can start before backend is healthy"
+
+        required_by: []
+
+      exposed_ports:
+        - port: 5173
+          protocol: HTTP
+          purpose: "Vite dev server and HMR WebSocket"
+          accessibility: "Host only"
+
+      health_check: null  # No health check defined (not critical for dev environment)
+
+      environment_schema:
+        required:
+          VITE_API_BASE_URL:
+            type: string
+            default: "http://localhost:3000/api"
+            validation: "Valid HTTP(S) URL"
+            purpose: "Backend API base URL for Axios client"
+
+          NODE_ENV:
+            type: enum
+            allowed: ["development", "production"]
+            default: "development"
+
+        optional:
+          VITE_HMR_PORT:
+            type: number
+            default: 5173
+            validation: "1-65535"
+            purpose: "Hot Module Replacement WebSocket port"
+
+          VITE_HMR_HOST:
+            type: string
+            default: "localhost"
+            validation: "Valid hostname"
+            purpose: "HMR WebSocket host"
+
+          CHOKIDAR_USEPOLLING:
+            type: boolean
+            default: false
+            purpose: "File watching mode (false = native inotify)"
+
+      volume_contracts:
+        source_code:
+          host_path: "./frontend"
+          mount_point: "/app"
+          type: "bind_mount"
+          mode: "cached"
+          purpose: "Hot-reload source code changes"
+
+        frontend_node_modules:
+          mount_point: "/app/node_modules"
+          type: "anonymous_volume"
+          persistence: "restorable"
+          typical_size: "300-400 MB"
+          purpose: "Isolate dependencies from host for performance"
+
+        frontend_vite_cache:
+          mount_point: "/app/node_modules/.vite"
+          type: "named_volume"
+          persistence: "restorable"
+          typical_size: "50-100 MB"
+          purpose: "Vite dependency pre-bundling cache"
+
+      startup_sequence:
+        1:
+          step: "Install/update dependencies"
+          script: "docker-entrypoint.sh (optional)"
+          action: "Run npm ci if package.json changed"
+          condition: "package.json or package-lock.json newer than marker file"
+
+        2:
+          step: "Start Vite dev server"
+          command: "npm run dev -- --host 0.0.0.0"
+          action: "Launch Vite with HMR enabled"
+          options:
+            - "--host 0.0.0.0": "Bind to all interfaces (accessible from host)"
+
+# ==============================================================================
+# VOLUME CONTRACTS
+# ==============================================================================
+
+volumes:
+  postgres_data:
+    driver: local
+    contract:
+      purpose: "Persistent storage for PostgreSQL database files"
+      data_criticality: "CRITICAL - contains all user data"
+      cleanup_impact: "Data loss - all objectives, key results, users"
+      backup_strategy: "pg_dump SQL exports + volume tar archives"
+      restore_procedure: "psql import from SQL dump OR tar extract to volume"
+      typical_growth: "10-20 MB per 1000 objectives"
+
+  backend_node_modules:
+    driver: local
+    contract:
+      purpose: "Backend Node.js dependencies isolation"
+      data_criticality: "RESTORABLE - can recreate with npm ci"
+      cleanup_impact: "Slower startup (npm ci required on next run)"
+      restore_procedure: "Automatic on next container start"
+
+  frontend_node_modules:
+    driver: local
+    contract:
+      purpose: "Frontend Node.js dependencies isolation"
+      data_criticality: "RESTORABLE - can recreate with npm ci"
+      cleanup_impact: "Slower startup (npm ci required on next run)"
+      restore_procedure: "Automatic on next container start"
+
+  backend_dist:
+    driver: local
+    contract:
+      purpose: "TypeScript build output cache"
+      data_criticality: "RESTORABLE - can recreate with npm build"
+      cleanup_impact: "Minimal - rebuilds on startup"
+      restore_procedure: "Automatic TypeScript compilation"
+
+  frontend_vite_cache:
+    driver: local
+    contract:
+      purpose: "Vite dependency pre-bundling cache"
+      data_criticality: "RESTORABLE - Vite auto-rebuilds on cache miss"
+      cleanup_impact: "Slower initial page load (1-2 seconds extra)"
+      restore_procedure: "Automatic Vite cache rebuild"
+
+# ==============================================================================
+# NETWORK CONTRACTS
+# ==============================================================================
+
+networks:
+  agiemme-network:
+    driver: bridge
+    contract:
+      purpose: "Internal communication between services"
+      isolation: "Services can communicate by service name (DNS)"
+      security: "No external access except exposed ports"
+      dns_resolution:
+        - "postgres resolves to postgres container IP"
+        - "backend resolves to backend container IP"
+        - "frontend resolves to frontend container IP"
+
+# ==============================================================================
+# INTEGRATION CONTRACTS
+# ==============================================================================
+
+integration_contracts:
+
+  # Frontend → Backend API
+  frontend_to_backend:
+    protocol: HTTP
+    url_pattern: "${VITE_API_BASE_URL}/*"
+    authentication: "JWT Bearer token in Authorization header"
+    cors: "Backend allows requests from ${FRONTEND_URL}"
+    content_type: "application/json"
+    error_handling: "4xx/5xx responses handled by Axios interceptor"
+
+  # Backend → PostgreSQL
+  backend_to_database:
+    protocol: "PostgreSQL wire protocol (TCP)"
+    connection_string: "postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}"
+    connection_pool: "Max 20 connections, idle timeout 30s"
+    retry_logic: "5 retries with 3-second delay on connection failure"
+    migration_locking: "Transaction-based with unique constraint on migration filename"
+
+# ==============================================================================
+# VALIDATION RULES
+# ==============================================================================
+
+validation:
+  startup_order:
+    - "postgres must reach 'healthy' before backend starts"
+    - "backend must reach 'started' (not necessarily healthy) before frontend starts"
+    - "Total environment startup must complete within 180 seconds (SC-001)"
+
+  port_availability:
+    - "Port 5432 must be free on host before starting"
+    - "Port 3000 must be free on host before starting"
+    - "Port 5173 must be free on host before starting"
+    - "Pre-flight check script validates port availability"
+
+  environment_security:
+    - "Warn if JWT_SECRET equals default value"
+    - "Warn if DATABASE_PASSWORD equals default value"
+    - "Do not block startup on insecure defaults (development mode)"
+
+  performance_targets:
+    - "Frontend hot-reload: <2 seconds (SC-002)"
+    - "Backend hot-reload: <3 seconds (SC-003)"
+    - "Database data persists: 10+ restarts (SC-004)"
+    - "Environment cleanup: <30 seconds (SC-006)"
+
+  data_integrity:
+    - "postgres_data volume must not be removed during normal shutdown"
+    - "Migrations must execute within transactions (rollback on failure)"
+    - "Health checks must not modify data (read-only queries)"
+
+# ==============================================================================
+# FAILURE MODES & RECOVERY
+# ==============================================================================
+
+failure_modes:
+  postgres_health_check_fails:
+    cause: "Database not accepting connections"
+    impact: "Backend container won't start"
+    recovery: "Check postgres logs, verify credentials, ensure volume not corrupted"
+
+  backend_migration_fails:
+    cause: "Invalid SQL in migration file"
+    impact: "Backend container exits with code 1"
+    recovery: "Fix migration SQL, restart backend container"
+
+  port_conflict:
+    cause: "Required port already in use by another process"
+    impact: "Docker Compose fails to start services"
+    recovery: "Run check-ports.sh, kill conflicting process, retry"
+
+  volume_corruption:
+    cause: "Disk failure or unclean shutdown"
+    impact: "PostgreSQL fails to start"
+    recovery: "Restore from backup, or docker compose down -v for fresh start"
+
+  dependency_version_mismatch:
+    cause: "package.json changed but node_modules not updated"
+    impact: "Application crashes or behaves unexpectedly"
+    recovery: "Entrypoint script auto-detects and runs npm ci"
+
+# ==============================================================================
+# SUCCESS CRITERIA MAPPING
+# ==============================================================================
+
+success_criteria:
+  SC-001:
+    requirement: "Start complete application stack in under 3 minutes"
+    validation: "Measure time from 'docker compose up' to all services healthy"
+    contracts:
+      - postgres health check passes within 35s
+      - backend health check passes within 60s
+      - frontend responds within 20s
+      - Total: ~115 seconds (well under 180s limit)
+
+  SC-002:
+    requirement: "Frontend code changes reflected in browser within 2 seconds"
+    validation: "Edit .tsx file, measure time until browser updates"
+    contracts:
+      - Bind mount with :cached mode
+      - Vite HMR WebSocket active
+      - CHOKIDAR_USEPOLLING=false (native file events)
+
+  SC-003:
+    requirement: "Backend code changes trigger reload within 3 seconds"
+    validation: "Edit .ts file, measure time until server restarts"
+    contracts:
+      - Bind mount with :cached mode
+      - tsx watch with native file events
+      - CHOKIDAR_USEPOLLING=false
+
+  SC-004:
+    requirement: "Database data persists across 10 consecutive restarts"
+    validation: "Create data, run 'docker compose down && up' 10 times, verify data intact"
+    contracts:
+      - postgres_data named volume
+      - Volume not removed by 'docker compose down' (requires -v flag)
+
+  SC-005:
+    requirement: "View real-time logs with timestamps and service identification"
+    validation: "Run 'docker compose logs -f', verify output format"
+    contracts:
+      - Docker Compose native logging
+      - Service names prefix each log line
+
+  SC-006:
+    requirement: "Complete cleanup in under 30 seconds"
+    validation: "Measure 'docker compose down -v' execution time"
+    contracts:
+      - Graceful container shutdown
+      - Volume removal in parallel
+
+  SC-007:
+    requirement: "Zero manual configuration steps"
+    validation: "Fresh repo clone, run 'docker compose up', verify success"
+    contracts:
+      - Environment defaults in docker-compose.yml
+      - Automatic npm ci via entrypoint script
+      - Automatic database migrations via entrypoint script
+      - No .env file required
